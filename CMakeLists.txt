@@ -6,31 +6,12 @@
 cmake_minimum_required(VERSION 3.5...3.20)
 
 project(boost_signals2 VERSION "${BOOST_SUPERPROJECT_VERSION}" LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
 
 add_library(boost_signals2 INTERFACE)
 add_library(Boost::signals2 ALIAS boost_signals2)
 
 target_include_directories(boost_signals2 INTERFACE include)
-
-target_link_libraries(boost_signals2
-  INTERFACE
-    Boost::assert
-    Boost::bind
-    Boost::config
-    Boost::core
-    Boost::function
-    Boost::iterator
-    Boost::mpl
-    Boost::optional
-    Boost::parameter
-    Boost::predef
-    Boost::preprocessor
-    Boost::smart_ptr
-    Boost::throw_exception
-    Boost::tuple
-    Boost::type_traits
-    Boost::variant
-)
 
 if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/CMakeLists.txt")
 
