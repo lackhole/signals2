@@ -11,69 +11,44 @@
 // 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 
-// This file is included iteratively, and should not be protected from multiple inclusion
-
-#ifdef BOOST_NO_CXX11_VARIADIC_TEMPLATES
-#define BOOST_SIGNALS2_NUM_ARGS BOOST_PP_ITERATION()
-#else
-#define BOOST_SIGNALS2_NUM_ARGS 1
-#endif
-
-// R, T1, T2, ..., TN, Combiner, Group, GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex
-#define BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION \
-  BOOST_SIGNALS2_SIGNATURE_TEMPLATE_INSTANTIATION(BOOST_SIGNALS2_NUM_ARGS), \
-  Combiner, Group, GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex
-
 namespace boost
 {
   namespace signals2
   {
     namespace detail
     {
+      template<class T>
+      struct unwrap_reference { using type = T; };
+      template<class U>
+      struct unwrap_reference<std::reference_wrapper<U>> { using type = U&; };
+
+      template<class T>
+      inline typename unwrap_reference<T>::type& unwrap_ref(T & t) noexcept {
+        return t;
+      }
+
       // helper for bound_extended_slot_function that handles specialization for void return
       template<typename R>
-        class BOOST_SIGNALS2_BOUND_EXTENDED_SLOT_FUNCTION_INVOKER_N(BOOST_SIGNALS2_NUM_ARGS)
+        class bound_extended_slot_function_invoker
       {
       public:
         typedef R result_type;
-        template<typename ExtendedSlotFunction BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-          BOOST_SIGNALS2_ARGS_TEMPLATE_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-          result_type operator()(ExtendedSlotFunction &func, const connection &conn
-            BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-            BOOST_SIGNALS2_FULL_FORWARD_ARGS(BOOST_SIGNALS2_NUM_ARGS)) const
+        template<typename ExtendedSlotFunction, typename ... Args>
+          result_type operator()(ExtendedSlotFunction &func, const connection &conn, Args&& ...args) const
         {
-          return func(conn BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-            BOOST_SIGNALS2_FORWARDED_ARGS(BOOST_SIGNALS2_NUM_ARGS));
+          return func(conn, std::forward<Args>(args)...);
         }
       };
-#ifdef BOOST_NO_VOID_RETURNS
-      template<>
-        class BOOST_SIGNALS2_BOUND_EXTENDED_SLOT_FUNCTION_INVOKER_N(BOOST_SIGNALS2_NUM_ARGS)<void>
-      {
-      public:
-        typedef result_type_wrapper<void>::type result_type;
-        template<typename ExtendedSlotFunction BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-          BOOST_SIGNALS2_ARGS_TEMPLATE_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-          result_type operator()(ExtendedSlotFunction &func, const connection &conn
-            BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-            BOOST_SIGNALS2_FULL_FORWARD_ARGS(BOOST_SIGNALS2_NUM_ARGS)) const
-        {
-          func(conn BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-            BOOST_SIGNALS2_FORWARDED_ARGS(BOOST_SIGNALS2_NUM_ARGS));
-          return result_type();
-        }
-      };
-#endif
 // wrapper around an signalN::extended_slot_function which binds the
 // connection argument so it looks like a normal
 // signalN::slot_function
 
       template<typename ExtendedSlotFunction>
-        class BOOST_SIGNALS2_BOUND_EXTENDED_SLOT_FUNCTION_N(BOOST_SIGNALS2_NUM_ARGS)
+        class bound_extended_slot_function
       {
       public:
         typedef typename result_type_wrapper<typename ExtendedSlotFunction::result_type>::type result_type;
-        BOOST_SIGNALS2_BOUND_EXTENDED_SLOT_FUNCTION_N(BOOST_SIGNALS2_NUM_ARGS)(const ExtendedSlotFunction &fun):
+          bound_extended_slot_function(const ExtendedSlotFunction &fun):
           _fun(fun), _connection(new connection)
         {}
         void set_connection(const connection &conn)
@@ -81,69 +56,58 @@ namespace boost
           *_connection = conn;
         }
 
-#if BOOST_SIGNALS2_NUM_ARGS > 0
-        template<BOOST_SIGNALS2_ARGS_TEMPLATE_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-#endif // BOOST_SIGNALS2_NUM_ARGS > 0
-          result_type operator()(BOOST_SIGNALS2_FULL_FORWARD_ARGS(BOOST_SIGNALS2_NUM_ARGS))
+        template<typename...Args>
+          result_type operator()(Args&& ...args)
         {
-          return BOOST_SIGNALS2_BOUND_EXTENDED_SLOT_FUNCTION_INVOKER_N(BOOST_SIGNALS2_NUM_ARGS)
+          return bound_extended_slot_function_invoker
             <typename ExtendedSlotFunction::result_type>()
-            (_fun, *_connection BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-              BOOST_SIGNALS2_FORWARDED_ARGS(BOOST_SIGNALS2_NUM_ARGS));
+            (_fun, *_connection, std::forward<Args>(args)...);
         }
         // const overload
-#if BOOST_SIGNALS2_NUM_ARGS > 0
-        template<BOOST_SIGNALS2_ARGS_TEMPLATE_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-#endif // BOOST_SIGNALS2_NUM_ARGS > 0
-          result_type operator()(BOOST_SIGNALS2_FULL_FORWARD_ARGS(BOOST_SIGNALS2_NUM_ARGS)) const
+        template<typename...Args>
+          result_type operator()(Args&& ...args) const
         {
-          return BOOST_SIGNALS2_BOUND_EXTENDED_SLOT_FUNCTION_INVOKER_N(BOOST_SIGNALS2_NUM_ARGS)
+          return bound_extended_slot_function_invoker
             <typename ExtendedSlotFunction::result_type>()
-            (_fun, *_connection BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-              BOOST_SIGNALS2_FORWARDED_ARGS(BOOST_SIGNALS2_NUM_ARGS));
+            (_fun, *_connection, std::forward<Args>(args)...);
         }
         template<typename T>
           bool contains(const T &other) const
         {
-          return _fun.contains(other);
+          const auto* ptr = _fun.template target<T*>();
+          return ptr != nullptr && *ptr == other;
         }
       private:
-        BOOST_SIGNALS2_BOUND_EXTENDED_SLOT_FUNCTION_N(BOOST_SIGNALS2_NUM_ARGS)()
+        bound_extended_slot_function()
         {}
 
         ExtendedSlotFunction _fun;
-        boost::shared_ptr<connection> _connection;
+        std::shared_ptr<connection> _connection;
       };
 
-      template<BOOST_SIGNALS2_SIGNAL_TEMPLATE_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-        class BOOST_SIGNALS2_WEAK_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS);
-      template<BOOST_SIGNALS2_SIGNAL_TEMPLATE_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-        class BOOST_SIGNALS2_SIGNAL_IMPL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS);
+      template<typename Signature,typename Combiner,typename Group,typename GroupCompare,typename SlotFunction,typename ExtendedSlotFunction,typename Mutex>
+        class weak_signal;
+      template<typename Signature,typename Combiner,typename Group,typename GroupCompare,typename SlotFunction,typename ExtendedSlotFunction,typename Mutex>
+        class signal_impl;
 
-      template<BOOST_SIGNALS2_SIGNAL_TEMPLATE_SPECIALIZATION_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-      class BOOST_SIGNALS2_SIGNAL_IMPL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) BOOST_SIGNALS2_SIGNAL_TEMPLATE_SPECIALIZATION
+      template<typename Combiner,typename Group,typename GroupCompare,typename SlotFunction,typename ExtendedSlotFunction,typename Mutex,typename R,typename...Args>
+      class signal_impl <R(Args...), Combiner, Group, GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex>
       {
       public:
         typedef SlotFunction slot_function_type;
         // typedef slotN<Signature, SlotFunction> slot_type;
-        typedef BOOST_SIGNALS2_SLOT_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-          <BOOST_SIGNALS2_SIGNATURE_TEMPLATE_INSTANTIATION(BOOST_SIGNALS2_NUM_ARGS),
-          slot_function_type> slot_type;
+        typedef slot<R(Args...), slot_function_type> slot_type;
         typedef ExtendedSlotFunction extended_slot_function_type;
         // typedef slotN+1<R, const connection &, T1, T2, ..., TN, extended_slot_function_type> extended_slot_type;
-        typedef BOOST_SIGNALS2_EXTENDED_SLOT_TYPE(BOOST_SIGNALS2_NUM_ARGS) extended_slot_type;
+        typedef slot<R(const connection&, Args...), extended_slot_function_type> extended_slot_type;
         typedef typename nonvoid<typename slot_function_type::result_type>::type nonvoid_slot_result_type;
       private:
-#ifdef BOOST_NO_CXX11_VARIADIC_TEMPLATES
-        class slot_invoker;
-#else // BOOST_NO_CXX11_VARIADIC_TEMPLATES
         typedef variadic_slot_invoker<nonvoid_slot_result_type, Args...> slot_invoker;
-#endif // BOOST_NO_CXX11_VARIADIC_TEMPLATES
         typedef slot_call_iterator_cache<nonvoid_slot_result_type, slot_invoker> slot_call_iterator_cache_type;
         typedef typename group_key<Group>::type group_key_type;
-        typedef shared_ptr<connection_body<group_key_type, slot_type, Mutex> > connection_body_type;
+        typedef std::shared_ptr<connection_body<group_key_type, slot_type, Mutex> > connection_body_type;
         typedef grouped_list<Group, GroupCompare, connection_body_type> connection_list_type;
-        typedef BOOST_SIGNALS2_BOUND_EXTENDED_SLOT_FUNCTION_N(BOOST_SIGNALS2_NUM_ARGS)<extended_slot_function_type>
+        typedef bound_extended_slot_function<extended_slot_function_type>
           bound_extended_slot_function_type;
       public:
         typedef Combiner combiner_type;
@@ -152,12 +116,11 @@ namespace boost
         typedef GroupCompare group_compare_type;
         typedef typename detail::slot_call_iterator_t<slot_invoker,
           typename connection_list_type::iterator, connection_body<group_key_type, slot_type, Mutex> > slot_call_iterator;
-        typedef detail::BOOST_SIGNALS2_WEAK_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-          <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION> weak_signal_type;
+        typedef detail::weak_signal<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex> weak_signal_type;
 
-        BOOST_SIGNALS2_SIGNAL_IMPL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)(const combiner_type &combiner_arg,
+        signal_impl(const combiner_type &combiner_arg,
           const group_compare_type &group_compare):
-          _shared_state(boost::make_shared<invocation_state>(connection_list_type(group_compare), combiner_arg)),
+          _shared_state(std::make_shared<invocation_state>(connection_list_type(group_compare), combiner_arg)),
           _garbage_collector_it(_shared_state->connection_bodies().end()),
           _mutex(new mutex_type())
         {}
@@ -196,7 +159,7 @@ namespace boost
         // disconnect slot(s)
         void disconnect_all_slots()
         {
-          shared_ptr<invocation_state> local_state =
+          std::shared_ptr<invocation_state> local_state =
             get_readable_state();
           typename connection_list_type::iterator it;
           for(it = local_state->connection_bodies().begin();
@@ -207,7 +170,7 @@ namespace boost
         }
         void disconnect(const group_type &group)
         {
-          shared_ptr<invocation_state> local_state =
+          std::shared_ptr<invocation_state> local_state =
             get_readable_state();
           group_key_type group_key(grouped_slots, group);
           typename connection_list_type::iterator it;
@@ -222,13 +185,13 @@ namespace boost
         template <typename T>
         void disconnect(const T &slot)
         {
-          typedef mpl::bool_<(is_convertible<T, group_type>::value)> is_group;
+          typedef std::bool_constant<(std::is_convertible<T, group_type>::value)> is_group;
           do_disconnect(unwrap_ref(slot), is_group());
         }
         // emit signal
-        result_type operator ()(BOOST_SIGNALS2_SIGNATURE_FULL_ARGS(BOOST_SIGNALS2_NUM_ARGS))
+        result_type operator ()(Args...args)
         {
-          shared_ptr<invocation_state> local_state;
+          std::shared_ptr<invocation_state> local_state;
           typename connection_list_type::iterator it;
           {
             garbage_collecting_lock<mutex_type> list_lock(*_mutex);
@@ -240,7 +203,7 @@ namespace boost
             during invocation. */
             local_state = _shared_state;
           }
-          slot_invoker invoker = slot_invoker(BOOST_SIGNALS2_SIGNATURE_ARG_NAMES(BOOST_SIGNALS2_NUM_ARGS));
+          slot_invoker invoker = slot_invoker(args...);
           slot_call_iterator_cache_type cache(invoker);
           invocation_janitor janitor(cache, *this, &local_state->connection_bodies());
           return detail::combiner_invoker<typename combiner_type::result_type>()
@@ -250,9 +213,9 @@ namespace boost
               slot_call_iterator(local_state->connection_bodies().end(), local_state->connection_bodies().end(), cache)
             );
         }
-        result_type operator ()(BOOST_SIGNALS2_SIGNATURE_FULL_ARGS(BOOST_SIGNALS2_NUM_ARGS)) const
+        result_type operator ()(Args...args) const
         {
-          shared_ptr<invocation_state> local_state;
+          std::shared_ptr<invocation_state> local_state;
           typename connection_list_type::iterator it;
           {
             garbage_collecting_lock<mutex_type> list_lock(*_mutex);
@@ -264,7 +227,7 @@ namespace boost
             during invocation. */
             local_state = _shared_state;
           }
-          slot_invoker invoker = slot_invoker(BOOST_SIGNALS2_SIGNATURE_ARG_NAMES(BOOST_SIGNALS2_NUM_ARGS));
+          slot_invoker invoker = slot_invoker(args...);
           slot_call_iterator_cache_type cache(invoker);
           invocation_janitor janitor(cache, *this, &local_state->connection_bodies());
           return detail::combiner_invoker<typename combiner_type::result_type>()
@@ -276,7 +239,7 @@ namespace boost
         }
         std::size_t num_slots() const
         {
-          shared_ptr<invocation_state> local_state =
+          std::shared_ptr<invocation_state> local_state =
             get_readable_state();
           typename connection_list_type::iterator it;
           std::size_t count = 0;
@@ -289,7 +252,7 @@ namespace boost
         }
         bool empty() const
         {
-          shared_ptr<invocation_state> local_state =
+          std::shared_ptr<invocation_state> local_state =
             get_readable_state();
           typename connection_list_type::iterator it;
           for(it = local_state->connection_bodies().begin();
@@ -301,83 +264,20 @@ namespace boost
         }
         combiner_type combiner() const
         {
-          unique_lock<mutex_type> lock(*_mutex);
+          std::lock_guard<mutex_type> lock(*_mutex);
           return _shared_state->combiner();
         }
         void set_combiner(const combiner_type &combiner_arg)
         {
-          unique_lock<mutex_type> lock(*_mutex);
+          std::lock_guard<mutex_type> lock(*_mutex);
           if(_shared_state.unique())
             _shared_state->combiner() = combiner_arg;
           else
-            _shared_state = boost::make_shared<invocation_state>(*_shared_state, combiner_arg);
+            _shared_state = std::make_shared<invocation_state>(*_shared_state, combiner_arg);
         }
       private:
         typedef Mutex mutex_type;
 
-        // slot_invoker is passed to slot_call_iterator_t to run slots
-#ifdef BOOST_NO_CXX11_VARIADIC_TEMPLATES
-        class slot_invoker
-        {
-        public:
-          typedef nonvoid_slot_result_type result_type;
-// typename add_reference<Tn>::type
-#define BOOST_SIGNALS2_ADD_REF_TYPE(z, n, data) \
-  typename add_reference<BOOST_PP_CAT(T, BOOST_PP_INC(n))>::type
-// typename add_reference<Tn>::type argn
-#define BOOST_SIGNALS2_ADD_REF_ARG(z, n, data) \
-  BOOST_SIGNALS2_ADD_REF_TYPE(~, n, ~) \
-  BOOST_SIGNALS2_SIGNATURE_ARG_NAME(~, n, ~)
-// typename add_reference<T1>::type arg1, typename add_reference<T2>::type arg2, ..., typename add_reference<Tn>::type argn
-#define BOOST_SIGNALS2_ADD_REF_ARGS(arity) \
-  BOOST_PP_ENUM(arity, BOOST_SIGNALS2_ADD_REF_ARG, ~)
-          slot_invoker(BOOST_SIGNALS2_ADD_REF_ARGS(BOOST_SIGNALS2_NUM_ARGS)) BOOST_PP_EXPR_IF(BOOST_SIGNALS2_NUM_ARGS, :)
-#undef BOOST_SIGNALS2_ADD_REF_ARGS
-
-// m_argn
-#define BOOST_SIGNALS2_M_ARG_NAME(z, n, data) BOOST_PP_CAT(m_arg, BOOST_PP_INC(n))
-// m_argn ( argn )
-#define BOOST_SIGNALS2_MISC_STATEMENT(z, n, data) \
-  BOOST_SIGNALS2_M_ARG_NAME(~, n, ~) ( BOOST_SIGNALS2_SIGNATURE_ARG_NAME(~, n, ~) )
-// m_arg1(arg1), m_arg2(arg2), ..., m_argn(argn)
-            BOOST_PP_ENUM(BOOST_SIGNALS2_NUM_ARGS, BOOST_SIGNALS2_MISC_STATEMENT, ~)
-#undef BOOST_SIGNALS2_MISC_STATEMENT
-          {}
-          result_type operator ()(const connection_body_type &connectionBody) const
-          {
-            return m_invoke<typename slot_type::result_type>(connectionBody);
-          }
-        private:
-          // declare assignment operator private since this class might have reference or const members
-          slot_invoker & operator=(const slot_invoker &);
-
-#define BOOST_SIGNALS2_ADD_REF_M_ARG_STATEMENT(z, n, data) \
-  BOOST_SIGNALS2_ADD_REF_TYPE(~, n, ~) BOOST_SIGNALS2_M_ARG_NAME(~, n, ~) ;
-          BOOST_PP_REPEAT(BOOST_SIGNALS2_NUM_ARGS, BOOST_SIGNALS2_ADD_REF_M_ARG_STATEMENT, ~)
-#undef BOOST_SIGNALS2_ADD_REF_M_ARG_STATEMENT
-#undef BOOST_SIGNALS2_ADD_REF_ARG
-#undef BOOST_SIGNALS2_ADD_REF_TYPE
-
-// m_arg1, m_arg2, ..., m_argn
-#define BOOST_SIGNALS2_M_ARG_NAMES(arity) BOOST_PP_ENUM(arity, BOOST_SIGNALS2_M_ARG_NAME, ~)
-          template<typename SlotResultType>
-          result_type m_invoke(const connection_body_type &connectionBody,
-            typename boost::enable_if<boost::is_void<SlotResultType> >::type * = 0) const
-          {
-            connectionBody->slot().slot_function()(BOOST_SIGNALS2_M_ARG_NAMES(BOOST_SIGNALS2_NUM_ARGS));
-            return void_type();
-          }
-          template<typename SlotResultType>
-          result_type m_invoke(const connection_body_type &connectionBody, 
-            typename boost::disable_if<boost::is_void<SlotResultType> >::type * = 0) const
-          {
-            return connectionBody->slot().slot_function()(BOOST_SIGNALS2_M_ARG_NAMES(BOOST_SIGNALS2_NUM_ARGS));
-          }
-        };
-#undef BOOST_SIGNALS2_M_ARG_NAMES
-#undef BOOST_SIGNALS2_M_ARG_NAME
-
-#endif // BOOST_NO_CXX11_VARIADIC_TEMPLATES
         // a struct used to optimize (minimize) the number of shared_ptrs that need to be created
         // inside operator()
         class invocation_state
@@ -402,15 +302,15 @@ namespace boost
         private:
           invocation_state(const invocation_state &);
 
-          shared_ptr<connection_list_type> _connection_bodies;
-          shared_ptr<combiner_type> _combiner;
+          std::shared_ptr<connection_list_type> _connection_bodies;
+          std::shared_ptr<combiner_type> _combiner;
         };
         // Destructor of invocation_janitor does some cleanup when a signal invocation completes.
         // Code can't be put directly in signal's operator() due to complications from void return types.
-        class invocation_janitor: noncopyable
+        class invocation_janitor
         {
         public:
-          typedef BOOST_SIGNALS2_SIGNAL_IMPL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) signal_type;
+          typedef signal_impl signal_type;
           invocation_janitor
           (
             const slot_call_iterator_cache_type &cache,
@@ -437,7 +337,7 @@ namespace boost
           bool grab_tracked,
           const typename connection_list_type::iterator &begin, unsigned count = 0) const
         {
-          BOOST_ASSERT(_shared_state.unique());
+          assert(_shared_state.unique());
           typename connection_list_type::iterator it;
           unsigned i;
           for(it = begin, i = 0;
@@ -462,7 +362,7 @@ namespace boost
         void nolock_cleanup_connections(garbage_collecting_lock<mutex_type> &lock,
           bool grab_tracked, unsigned count) const
         {
-          BOOST_ASSERT(_shared_state.unique());
+          assert(_shared_state.unique());
           typename connection_list_type::iterator begin;
           if(_garbage_collector_it == _shared_state->connection_bodies().end())
           {
@@ -479,7 +379,7 @@ namespace boost
         {
           if(_shared_state.unique() == false)
           {
-            _shared_state = boost::make_shared<invocation_state>(*_shared_state, _shared_state->connection_bodies());
+            _shared_state = std::make_shared<invocation_state>(*_shared_state, _shared_state->connection_bodies());
             nolock_cleanup_connections_from(lock, true, _shared_state->connection_bodies().begin());
           }else
           {
@@ -501,29 +401,29 @@ namespace boost
           }
           if(_shared_state.unique() == false)
           {
-            _shared_state = boost::make_shared<invocation_state>(*_shared_state, _shared_state->connection_bodies());
+            _shared_state = std::make_shared<invocation_state>(*_shared_state, _shared_state->connection_bodies());
           }
           nolock_cleanup_connections_from(list_lock, false, _shared_state->connection_bodies().begin());
         }
-        shared_ptr<invocation_state> get_readable_state() const
+        std::shared_ptr<invocation_state> get_readable_state() const
         {
-          unique_lock<mutex_type> list_lock(*_mutex);
+          std::lock_guard<mutex_type> list_lock(*_mutex);
           return _shared_state;
         }
         connection_body_type create_new_connection(garbage_collecting_lock<mutex_type> &lock,
           const slot_type &slot)
         {
           nolock_force_unique_connection_list(lock);
-          return boost::make_shared<connection_body<group_key_type, slot_type, Mutex> >(slot, _mutex);
+          return std::make_shared<connection_body<group_key_type, slot_type, Mutex> >(slot, _mutex);
         }
-        void do_disconnect(const group_type &group, mpl::bool_<true> /* is_group */)
+        void do_disconnect(const group_type &group, std::bool_constant<true> /* is_group */)
         {
           disconnect(group);
         }
         template<typename T>
-        void do_disconnect(const T &slot, mpl::bool_<false> /* is_group */)
+        void do_disconnect(const T &slot, std::bool_constant<false> /* is_group */)
         {
-          shared_ptr<invocation_state> local_state =
+          std::shared_ptr<invocation_state> local_state =
             get_readable_state();
           typename connection_list_type::iterator it;
           for(it = local_state->connection_bodies().begin();
@@ -531,7 +431,7 @@ namespace boost
           {
             garbage_collecting_lock<connection_body_base> lock(**it);
             if((*it)->nolock_nograb_connected() == false) continue;
-            if((*it)->slot().slot_function().contains(slot))
+            if(const auto* ptr = (*it)->slot().slot_function().template target<T*>(); ptr && *ptr == slot)
             {
               (*it)->nolock_disconnect(lock);
             }else
@@ -592,29 +492,33 @@ namespace boost
         }
 
         // _shared_state is mutable so we can do force_cleanup_connections during a const invocation
-        mutable shared_ptr<invocation_state> _shared_state;
+        mutable std::shared_ptr<invocation_state> _shared_state;
         mutable typename connection_list_type::iterator _garbage_collector_it;
         // connection list mutex must never be locked when attempting a blocking lock on a slot,
         // or you could deadlock.
-        const boost::shared_ptr<mutex_type> _mutex;
+        const std::shared_ptr<mutex_type> _mutex;
       };
 
     }
 
-    template<BOOST_SIGNALS2_SIGNAL_TEMPLATE_DEFAULTED_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-      class BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS);
+    template<typename Signature,
+      typename Combiner = optional_last_value<typename std::function<Signature>::result_type>,
+      typename Group = int,
+      typename GroupCompare = std::less<Group>,
+      typename SlotFunction = std::function<Signature>,
+      typename ExtendedSlotFunction = typename detail::variadic_extended_signature<Signature>::function_type,
+      typename Mutex = std::mutex>
+      class signal;
 
-    template<BOOST_SIGNALS2_SIGNAL_TEMPLATE_SPECIALIZATION_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-    class BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-      BOOST_SIGNALS2_SIGNAL_TEMPLATE_SPECIALIZATION: public signal_base,
-      public detail::BOOST_SIGNALS2_STD_FUNCTIONAL_BASE
+    template<typename Combiner,typename Group,typename GroupCompare,typename SlotFunction,typename ExtendedSlotFunction,typename Mutex,typename R,typename...Args>
+    class signal<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex>
+        : public signal_base
+        , public detail::std_functional_base<Args...>
     {
-      typedef detail::BOOST_SIGNALS2_SIGNAL_IMPL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-        <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION> impl_class;
+      typedef detail::signal_impl<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex> impl_class;
     public:
       typedef typename impl_class::weak_signal_type weak_signal_type;
-      friend class detail::BOOST_SIGNALS2_WEAK_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-        <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION>;
+      friend class detail::weak_signal<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex>;
 
       typedef SlotFunction slot_function_type;
       // typedef slotN<Signature, SlotFunction> slot_type;
@@ -628,63 +532,29 @@ namespace boost
       typedef GroupCompare group_compare_type;
       typedef typename impl_class::slot_call_iterator
         slot_call_iterator;
-      typedef typename mpl::identity<BOOST_SIGNALS2_SIGNATURE_FUNCTION_TYPE(BOOST_SIGNALS2_NUM_ARGS)>::type signature_type;
-
-#ifdef BOOST_NO_CXX11_VARIADIC_TEMPLATES
-
-// typedef Tn argn_type;
-#define BOOST_SIGNALS2_MISC_STATEMENT(z, n, data) \
-  typedef BOOST_PP_CAT(T, BOOST_PP_INC(n)) BOOST_PP_CAT(BOOST_PP_CAT(arg, BOOST_PP_INC(n)), _type);
-      BOOST_PP_REPEAT(BOOST_SIGNALS2_NUM_ARGS, BOOST_SIGNALS2_MISC_STATEMENT, ~)
-#undef BOOST_SIGNALS2_MISC_STATEMENT
-#if BOOST_SIGNALS2_NUM_ARGS == 1
-      typedef arg1_type argument_type;
-#elif BOOST_SIGNALS2_NUM_ARGS == 2
-      typedef arg1_type first_argument_type;
-      typedef arg2_type second_argument_type;
-#endif
-
-      template<unsigned n> class arg : public
-        detail::BOOST_SIGNALS2_PREPROCESSED_ARG_N_TYPE_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-        <n BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS)
-        BOOST_SIGNALS2_ARGS_TEMPLATE_INSTANTIATION(BOOST_SIGNALS2_NUM_ARGS)>
-      {};
-
-      BOOST_STATIC_CONSTANT(int, arity = BOOST_SIGNALS2_NUM_ARGS);
-
-#else // BOOST_NO_CXX11_VARIADIC_TEMPLATES
+      using signature_type = R(Args...);
 
       template<unsigned n> class arg
       {
       public:
         typedef typename detail::variadic_arg_type<n, Args...>::type type;
       };
-      BOOST_STATIC_CONSTANT(int, arity = sizeof...(Args));
+      static constexpr int arity = sizeof...(Args);
 
-#endif // BOOST_NO_CXX11_VARIADIC_TEMPLATES
-
-      BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)(const combiner_type &combiner_arg = combiner_type(),
-        const group_compare_type &group_compare = group_compare_type()):
-        _pimpl(new impl_class(combiner_arg, group_compare))
-      {}
-      virtual ~BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)()
-      {
-      }
+      signal(const combiner_type &combiner_arg = combiner_type(),
+             const group_compare_type &group_compare = group_compare_type())
+          : _pimpl(new impl_class(combiner_arg, group_compare)) {}
+      virtual ~signal() {}
       
       //move support
-#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
-      BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)(
-        BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) && other) BOOST_NOEXCEPT
+      signal(signal && other) noexcept
       {
         using std::swap;
         swap(_pimpl, other._pimpl);
       }
       
-      BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) & 
-        operator=(BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) && rhs) BOOST_NOEXCEPT
-      {
-        if(this == &rhs)
-        {
+      signal& operator=(signal && rhs) noexcept {
+        if(this == &rhs) {
           return *this;
         }
         _pimpl.reset();
@@ -692,7 +562,6 @@ namespace boost
         swap(_pimpl, rhs._pimpl);
         return *this;
       }
-#endif // !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
       
       connection connect(const slot_type &slot, connect_position position = at_back)
       {
@@ -728,13 +597,13 @@ namespace boost
         if (_pimpl.get() == 0) return;
         (*_pimpl).disconnect(slot);
       }
-      result_type operator ()(BOOST_SIGNALS2_SIGNATURE_FULL_ARGS(BOOST_SIGNALS2_NUM_ARGS))
+      result_type operator ()(Args...args)
       {
-        return (*_pimpl)(BOOST_SIGNALS2_SIGNATURE_ARG_NAMES(BOOST_SIGNALS2_NUM_ARGS));
+        return (*_pimpl)(args...);
       }
-      result_type operator ()(BOOST_SIGNALS2_SIGNATURE_FULL_ARGS(BOOST_SIGNALS2_NUM_ARGS)) const
+      result_type operator ()(Args...args) const
       {
-        return (*_pimpl)(BOOST_SIGNALS2_SIGNATURE_ARG_NAMES(BOOST_SIGNALS2_NUM_ARGS));
+        return (*_pimpl)(args...);
       }
       std::size_t num_slots() const
       {
@@ -754,12 +623,12 @@ namespace boost
       {
         return (*_pimpl).set_combiner(combiner_arg);
       }
-      void swap(BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) & other) BOOST_NOEXCEPT
+      void swap(signal & other) noexcept
       {
         using std::swap;
         swap(_pimpl, other._pimpl);
       }
-      bool operator==(const BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) & other) const
+      bool operator==(const signal & other) const
       {
         return _pimpl.get() == other._pimpl.get();
       }
@@ -768,71 +637,50 @@ namespace boost
         return _pimpl.get() == 0;
       }
     protected:
-      virtual shared_ptr<void> lock_pimpl() const
+      virtual std::shared_ptr<void> lock_pimpl() const
       {
         return _pimpl;
       }
     private:
       // explicit private copy constructor to avoid compiler trying to do implicit conversions to signal
-      explicit BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)(
-        const BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) & other) BOOST_NOEXCEPT
+      explicit signal(const signal & other) noexcept
       {
           // noncopyable
-          BOOST_ASSERT(false);
+          assert(false);
       }
 
-      shared_ptr<impl_class>
-        _pimpl;
+      std::shared_ptr<impl_class> _pimpl;
     };
-
-#ifdef BOOST_NO_CXX11_VARIADIC_TEMPLATES
-    // free swap function for signalN classes, findable by ADL
-    template<BOOST_SIGNALS2_SIGNAL_TEMPLATE_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-      void swap(
-        BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION> &sig1,
-        BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION> &sig2 ) BOOST_NOEXCEPT
-    {
-      sig1.swap(sig2);
-    }
-#endif
 
     namespace detail
     {
       // wrapper class for storing other signals as slots with automatic lifetime tracking
-      template<BOOST_SIGNALS2_SIGNAL_TEMPLATE_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-        class BOOST_SIGNALS2_WEAK_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS);
+      template<typename Signature,typename Combiner,typename Group,typename GroupCompare,typename SlotFunction,typename ExtendedSlotFunction,typename Mutex>
+        class weak_signal;
 
-      template<BOOST_SIGNALS2_SIGNAL_TEMPLATE_SPECIALIZATION_DECL(BOOST_SIGNALS2_NUM_ARGS)>
-        class BOOST_SIGNALS2_WEAK_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-        BOOST_SIGNALS2_SIGNAL_TEMPLATE_SPECIALIZATION
+      template<typename Combiner,typename Group,typename GroupCompare,typename SlotFunction,typename ExtendedSlotFunction,typename Mutex,typename R,typename...Args>
+        class weak_signal<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex>
       {
       public:
-        typedef typename BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-          <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION>::result_type
+        typedef typename signal<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex>::result_type
           result_type;
 
-        BOOST_SIGNALS2_WEAK_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-          (const BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-          <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION>
-          &signal):
-          _weak_pimpl(signal._pimpl)
-        {}
-        result_type operator ()(BOOST_SIGNALS2_SIGNATURE_FULL_ARGS(BOOST_SIGNALS2_NUM_ARGS))
+        weak_signal(const signal<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex>& signal)
+            : _weak_pimpl(signal._pimpl) {}
+
+        result_type operator ()(Args...args)
         {
-          shared_ptr<detail::BOOST_SIGNALS2_SIGNAL_IMPL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-            <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION> >
+          std::shared_ptr<detail::signal_impl<R(Args...), Combiner, Group, GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex> >
             shared_pimpl(_weak_pimpl.lock());
-          return (*shared_pimpl)(BOOST_SIGNALS2_SIGNATURE_ARG_NAMES(BOOST_SIGNALS2_NUM_ARGS));
+          return (*shared_pimpl)(args...);
         }
-        result_type operator ()(BOOST_SIGNALS2_SIGNATURE_FULL_ARGS(BOOST_SIGNALS2_NUM_ARGS)) const
+        result_type operator ()(Args...args) const
         {
-          shared_ptr<detail::BOOST_SIGNALS2_SIGNAL_IMPL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-            <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION> >
+          std::shared_ptr<detail::signal_impl<R(Args...), Combiner, Group, GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex>>
             shared_pimpl(_weak_pimpl.lock());
-          return (*shared_pimpl)(BOOST_SIGNALS2_SIGNATURE_ARG_NAMES(BOOST_SIGNALS2_NUM_ARGS));
+          return (*shared_pimpl)(args...);
         }
-        bool contains(const BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-          <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION> &signal) const
+        bool contains(const signal<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex>& signal) const
         {
           return _weak_pimpl.lock().get() == signal._pimpl.get(); 
         }
@@ -842,59 +690,13 @@ namespace boost
           return false;
         }
       private:
-        boost::weak_ptr<detail::BOOST_SIGNALS2_SIGNAL_IMPL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)
-          <BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION> > _weak_pimpl;
+        std::weak_ptr<detail::signal_impl<R(Args...),Combiner,Group,GroupCompare,SlotFunction,ExtendedSlotFunction,Mutex>> _weak_pimpl;
       };
 
-#ifndef BOOST_NO_CXX11_VARIADIC_TEMPLATES
       template<int arity, typename Signature>
         class extended_signature: public variadic_extended_signature<Signature>
       {};
-#else // BOOST_NO_CXX11_VARIADIC_TEMPLATES
-      template<int arity, typename Signature>
-        class extended_signature;
-      // partial template specialization
-      template<typename Signature>
-        class extended_signature<BOOST_SIGNALS2_NUM_ARGS, Signature>
-      {
-      public:
-// typename function_traits<Signature>::result_type (
-// const boost::signals2::connection &,
-// typename function_traits<Signature>::arg1_type,
-// typename function_traits<Signature>::arg2_type,
-// ...,
-// typename function_traits<Signature>::argn_type)
-#define BOOST_SIGNALS2_EXT_SIGNATURE(arity, Signature) \
-  typename function_traits<Signature>::result_type ( \
-  const boost::signals2::connection & BOOST_SIGNALS2_PP_COMMA_IF(BOOST_SIGNALS2_NUM_ARGS) \
-  BOOST_PP_ENUM(arity, BOOST_SIGNALS2_SIGNATURE_TO_ARGN_TYPE, Signature) )
-        typedef function<BOOST_SIGNALS2_EXT_SIGNATURE(BOOST_SIGNALS2_NUM_ARGS, Signature)> function_type;
-#undef BOOST_SIGNALS2_EXT_SIGNATURE
-      };
-
-      template<unsigned arity, typename Signature, typename Combiner,
-        typename Group, typename GroupCompare, typename SlotFunction,
-        typename ExtendedSlotFunction, typename Mutex>
-      class signalN;
-      // partial template specialization
-      template<typename Signature, typename Combiner, typename Group,
-        typename GroupCompare, typename SlotFunction,
-        typename ExtendedSlotFunction, typename Mutex>
-      class signalN<BOOST_SIGNALS2_NUM_ARGS, Signature, Combiner, Group,
-        GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex>
-      {
-      public:
-        typedef BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)<
-          BOOST_SIGNALS2_PORTABLE_SIGNATURE(BOOST_SIGNALS2_NUM_ARGS, Signature),
-          Combiner, Group,
-          GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex> type;
-      };
-
-#endif // BOOST_NO_CXX11_VARIADIC_TEMPLATES
 
     } // namespace detail
   } // namespace signals2
 } // namespace boost
-
-#undef BOOST_SIGNALS2_NUM_ARGS
-#undef BOOST_SIGNALS2_SIGNAL_TEMPLATE_INSTANTIATION

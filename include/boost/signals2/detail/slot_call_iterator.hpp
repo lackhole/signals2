@@ -12,19 +12,13 @@
 #ifndef BOOST_SIGNALS2_SLOT_CALL_ITERATOR_HPP
 #define BOOST_SIGNALS2_SLOT_CALL_ITERATOR_HPP
 
-#include <boost/assert.hpp>
-#include <boost/core/no_exceptions_support.hpp>
-#include <boost/iterator/iterator_facade.hpp>
-#include <boost/optional.hpp>
-#include <boost/scoped_ptr.hpp>
+#include <memory>
+#include <optional>
+#include <type_traits>
+
 #include <boost/signals2/connection.hpp>
 #include <boost/signals2/slot_base.hpp>
 #include <boost/signals2/detail/auto_buffer.hpp>
-#include <boost/signals2/detail/unique_lock.hpp>
-#include <boost/type_traits/add_const.hpp>
-#include <boost/type_traits/add_reference.hpp>
-#include <boost/type_traits/aligned_storage.hpp>
-#include <boost/weak_ptr.hpp>
 
 namespace boost {
   namespace signals2 {
@@ -60,8 +54,8 @@ namespace boost {
             m_active_slot->inc_slot_refcount(lock);
         }
 
-        optional<ResultType> result;
-        typedef auto_buffer<void_shared_ptr_variant, store_n_objects<10> > tracked_ptrs_type;
+        std::optional<ResultType> result;
+        typedef auto_buffer<std::shared_ptr<void>, store_n_objects<10> > tracked_ptrs_type;
         tracked_ptrs_type tracked_ptrs;
         Function f;
         unsigned connected_slot_count;
@@ -75,22 +69,26 @@ namespace boost {
       //   - caches the result of calling the slots
       template<typename Function, typename Iterator, typename ConnectionBody>
       class slot_call_iterator_t
-        : public boost::iterator_facade<slot_call_iterator_t<Function, Iterator, ConnectionBody>,
-        typename Function::result_type,
-        boost::single_pass_traversal_tag>
       {
-        typedef boost::iterator_facade<slot_call_iterator_t<Function, Iterator, ConnectionBody>,
-          typename Function::result_type,
-          boost::single_pass_traversal_tag>
-        inherited;
 
         typedef typename Function::result_type result_type;
 
         typedef slot_call_iterator_cache<result_type, Function> cache_type;
 
-        friend class boost::iterator_core_access;
-
       public:
+        using value_type = typename Function::result_type;
+        using iterator_category = std::input_iterator_tag;
+        using reference = value_type&;
+        using pointer = std::conditional_t<
+          std::disjunction<
+            std::is_const<reference>,
+            std::is_const<std::remove_reference_t<reference>>,
+            std::is_const<value_type>
+          >::value,
+          std::add_pointer_t<const value_type>,
+          std::add_pointer_t<value_type>>;
+        using difference_type = std::ptrdiff_t;
+
         slot_call_iterator_t(Iterator iter_in, Iterator end_in,
           cache_type &c):
           iter(iter_in), end(end_in),
@@ -99,34 +97,45 @@ namespace boost {
           lock_next_callable();
         }
 
-        typename inherited::reference
-        dereference() const
+        reference operator*() const
         {
           if (!cache->result) {
-            BOOST_TRY
+            try
             {
               cache->result = cache->f(*iter);
             }
-            BOOST_CATCH(expired_slot &)
+            catch (expired_slot &)
             {
               (*iter)->disconnect();
-              BOOST_RETHROW
+              std::rethrow_exception(std::current_exception());
             }
-            BOOST_CATCH_END
           }
           return cache->result.get();
         }
 
-        void increment()
+        slot_call_iterator_t& operator++()
         {
           ++iter;
           lock_next_callable();
           cache->result.reset();
+          return *this;
         }
 
-        bool equal(const slot_call_iterator_t& other) const
+        slot_call_iterator_t operator++(int)
+        {
+          slot_call_iterator_t tmp(*this);
+          ++(*this);
+          return tmp;
+        }
+
+        bool operator==(const slot_call_iterator_t& other) const
         {
           return iter == other.iter;
+        }
+
+        bool operator!=(const slot_call_iterator_t& other) const
+        {
+          return !(iter == other.iter);
         }
 
       private:

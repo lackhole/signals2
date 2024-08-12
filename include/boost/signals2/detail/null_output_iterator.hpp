@@ -11,7 +11,7 @@
 #ifndef BOOST_SIGNALS2_NULL_OUTPUT_ITERATOR_HPP
 #define BOOST_SIGNALS2_NULL_OUTPUT_ITERATOR_HPP
 
-#include <boost/iterator/function_output_iterator.hpp>
+#include <type_traits>
 
 namespace boost
 {
@@ -19,6 +19,51 @@ namespace boost
   {
     namespace detail
     {
+      template <class UnaryFunction>
+      class function_output_iterator {
+       private:
+        typedef function_output_iterator self;
+
+        class output_proxy {
+         public:
+          explicit output_proxy(UnaryFunction& f) noexcept : m_f(f) { }
+
+          template <class T>
+          typename std::enable_if_t<
+            !std::is_same< std::remove_cv_t< std::remove_reference_t< T > >, output_proxy >::value,
+            output_proxy&
+          > operator=(T&& value) {
+            m_f(static_cast< T&& >(value));
+            return *this;
+          }
+
+          output_proxy(output_proxy const& that) = default;
+          output_proxy& operator=(output_proxy const&) = delete;
+
+         private:
+          UnaryFunction& m_f;
+        };
+
+       public:
+        typedef std::output_iterator_tag iterator_category;
+        typedef void                value_type;
+        typedef void                difference_type;
+        typedef void                pointer;
+        typedef void                reference;
+
+        explicit function_output_iterator() {}
+
+        explicit function_output_iterator(const UnaryFunction& f)
+          : m_f(f) {}
+
+        output_proxy operator*() { return output_proxy(m_f); }
+        self& operator++() { return *this; }
+        self& operator++(int) { return *this; }
+
+       private:
+        UnaryFunction m_f;
+      };
+
       class does_nothing
       {
       public:
@@ -26,7 +71,7 @@ namespace boost
           void operator()(const T&) const
           {}
       };
-      typedef boost::function_output_iterator<does_nothing> null_output_iterator;
+      typedef function_output_iterator<does_nothing> null_output_iterator;
     } // namespace detail
   } // namespace signals2
 } // namespace boost

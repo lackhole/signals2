@@ -15,20 +15,9 @@
 #ifndef BOOST_SIGNALS2_DETAIL_VARIADIC_SLOT_INVOKER_HPP
 #define BOOST_SIGNALS2_DETAIL_VARIADIC_SLOT_INVOKER_HPP
 
-#include <boost/mpl/size_t.hpp>
 #include <boost/signals2/detail/variadic_arg_type.hpp>
 
-// if compiler has std::tuple use it instead of boost::tuple
-// because boost::tuple does not have variadic template support at present.
-#ifdef BOOST_NO_CXX11_HDR_TUPLE
-#include <boost/tuple/tuple.hpp>
-#define BOOST_SIGNALS2_TUPLE boost::tuple
-#define BOOST_SIGNALS2_GET boost::get
-#else
 #include <tuple>
-#define BOOST_SIGNALS2_TUPLE std::tuple
-#define BOOST_SIGNALS2_GET std::get
-#endif
 
 // vc12 seems to erroneously report formal parameters as unreferenced (warning C4100)
 // if parameters of variadic template functions are only referenced by calling
@@ -84,25 +73,25 @@ namespace boost
         typedef R result_type;
 
         template<typename Func, typename ... Args, std::size_t N>
-        R operator()(Func &func, const BOOST_SIGNALS2_TUPLE<Args...> & args, mpl::size_t<N>) const
+        R operator()(Func &func, const std::tuple<Args...> & args, std::integral_constant<std::size_t, N>) const
         {
           typedef typename make_unsigned_meta_array<N>::type indices_type;
           return m_invoke<Func>(func, indices_type(), args);
         }
       private:
         template<typename Func, unsigned ... indices, typename ... Args>
-          R m_invoke(Func &func, unsigned_meta_array<indices...>, const BOOST_SIGNALS2_TUPLE<Args...> & args,
-            typename boost::disable_if<boost::is_void<typename Func::result_type> >::type * = 0
+          R m_invoke(Func &func, unsigned_meta_array<indices...>, const std::tuple<Args...> & args,
+            typename std::enable_if<!std::is_void_v<typename Func::result_type> >::type * = 0
           ) const
         {
-          return func(BOOST_SIGNALS2_GET<indices>(args)...);
+          return func(std::get<indices>(args)...);
         }
         template<typename Func, unsigned ... indices, typename ... Args>
-          R m_invoke(Func &func, unsigned_meta_array<indices...>, const BOOST_SIGNALS2_TUPLE<Args...> & args,
-            typename boost::enable_if<boost::is_void<typename Func::result_type> >::type * = 0
+          R m_invoke(Func &func, unsigned_meta_array<indices...>, const std::tuple<Args...> & args,
+            typename std::enable_if<std::is_void_v<typename Func::result_type> >::type * = 0
           ) const
         {
-          func(BOOST_SIGNALS2_GET<indices>(args)...);
+          func(std::get<indices>(args)...);
           return R();
         }
         // This overload is redundant, as it is the same as the previous variadic method when
@@ -110,8 +99,8 @@ namespace boost
         // only exists to quiet some unused parameter warnings
         // on certain compilers (some versions of gcc and msvc)
         template<typename Func>
-          R m_invoke(Func &func, unsigned_meta_array<>, const BOOST_SIGNALS2_TUPLE<> &, 
-            typename boost::enable_if<boost::is_void<typename Func::result_type> >::type * = 0
+          R m_invoke(Func &func, unsigned_meta_array<>, const std::tuple<> &,
+            typename std::enable_if<std::is_void_v<typename Func::result_type> >::type * = 0
           ) const
         {
           func();
@@ -131,10 +120,10 @@ namespace boost
           result_type operator ()(const ConnectionBodyType &connectionBody) const
         {
           return call_with_tuple_args<result_type>()(connectionBody->slot().slot_function(), 
-            _args, mpl::size_t<sizeof...(Args)>());
+            _args, std::integral_constant<std::size_t, sizeof...(Args)>{});
         }
       private:
-        BOOST_SIGNALS2_TUPLE<Args& ...> _args;
+        std::tuple<Args& ...> _args;
       };
     } // namespace detail
   } // namespace signals2

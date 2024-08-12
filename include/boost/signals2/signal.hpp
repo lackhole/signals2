@@ -13,30 +13,17 @@
 #define BOOST_SIGNALS2_SIGNAL_HPP
 
 #include <algorithm>
-#include <boost/assert.hpp>
-#include <boost/config.hpp>
-#include <boost/core/noncopyable.hpp>
-#include <boost/function.hpp>
-#include <boost/mpl/identity.hpp>
-#include <boost/shared_ptr.hpp>
 #include <boost/signals2/connection.hpp>
-#include <boost/signals2/detail/unique_lock.hpp>
 #include <boost/signals2/detail/replace_slot_function.hpp>
 #include <boost/signals2/detail/result_type_wrapper.hpp>
 #include <boost/signals2/detail/signals_common.hpp>
-#include <boost/signals2/detail/signals_common_macros.hpp>
 #include <boost/signals2/detail/slot_groups.hpp>
 #include <boost/signals2/detail/slot_call_iterator.hpp>
 #include <boost/signals2/optional_last_value.hpp>
-#include <boost/signals2/mutex.hpp>
 #include <boost/signals2/slot.hpp>
 #include <functional>
 
-#ifdef BOOST_NO_CXX11_VARIADIC_TEMPLATES
-#include <boost/signals2/preprocessed_signal.hpp>
-#else
 #include <boost/signals2/variadic_signal.hpp>
-#endif
 
 namespace boost
 {
@@ -52,7 +39,7 @@ namespace boost
       typename Mutex>
       void swap(
         signal<Signature, Combiner, Group, GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex> &sig1,
-        signal<Signature, Combiner, Group, GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex> &sig2) BOOST_NOEXCEPT
+        signal<Signature, Combiner, Group, GroupCompare, SlotFunction, ExtendedSlotFunction, Mutex> &sig2) noexcept
     {
       sig1.swap(sig2);
     }
