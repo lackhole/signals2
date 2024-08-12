@@ -11,19 +11,20 @@
 #ifndef BOOST_SIGNALS2_SIGNALS_COMMON_HPP
 #define BOOST_SIGNALS2_SIGNALS_COMMON_HPP
 
-#include <boost/core/ref.hpp>
-#include <boost/mpl/bool.hpp>
-#include <boost/mpl/if.hpp>
+#include <functional>
 #include <boost/signals2/signal_base.hpp>
-#include <boost/type_traits/is_base_of.hpp>
 
 namespace boost {
   namespace signals2 {
     namespace detail {
+      template<typename T>
+      struct is_reference_wrapper : std::false_type {};
+      template<typename T>
+      struct is_reference_wrapper<std::reference_wrapper<T>> : std::true_type{};
+
       // Determine if the given type T is a signal
       template<typename T>
-      class is_signal: public mpl::bool_<is_base_of<signal_base, T>::value>
-      {};
+      class is_signal: public std::is_base_of<signal_base, T> {};
 
       // A slot can be a signal, a reference to a function object, or a
       // function object.
@@ -35,10 +36,10 @@ namespace boost {
       // standard slot
       template<typename S>
       class get_slot_tag {
-        typedef typename mpl::if_<is_signal<S>,
+        typedef typename std::conditional<is_signal<S>::value,
           signal_tag, value_tag>::type signal_or_value;
       public:
-        typedef typename mpl::if_<is_reference_wrapper<S>,
+        typedef typename std::conditional<is_reference_wrapper<S>::value,
                             reference_tag,
                             signal_or_value>::type type;
       };

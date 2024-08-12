@@ -12,15 +12,14 @@
 #ifndef BOOST_SIGNALS2_TRACKED_OBJECTS_VISITOR_HPP
 #define BOOST_SIGNALS2_TRACKED_OBJECTS_VISITOR_HPP
 
-#include <boost/core/ref.hpp>
-#include <boost/mpl/bool.hpp>
+#include <functional>
+#include <memory>
+#include <type_traits>
+
 #include <boost/signals2/detail/signals_common.hpp>
 #include <boost/signals2/slot_base.hpp>
 #include <boost/signals2/trackable.hpp>
-#include <boost/type_traits/is_function.hpp>
-#include <boost/type_traits/is_pointer.hpp>
-#include <boost/type_traits/remove_pointer.hpp>
-#include <boost/core/addressof.hpp>
+
 
 namespace boost
 {
@@ -37,45 +36,45 @@ namespace boost
         template<typename T>
         void operator()(const T& t) const
         {
-            m_visit_reference_wrapper(t, mpl::bool_<is_reference_wrapper<T>::value>());
+            m_visit_reference_wrapper(t, is_reference_wrapper<T>{});
         }
       private:
         template<typename T>
-        void m_visit_reference_wrapper(const reference_wrapper<T> &t, const mpl::bool_<true> &) const
+        void m_visit_reference_wrapper(const std::reference_wrapper<T> &t, const std::true_type &) const
         {
-            m_visit_pointer(t.get_pointer(), mpl::bool_<true>());
+            m_visit_pointer(t.get_pointer(), std::true_type{});
         }
         template<typename T>
-        void m_visit_reference_wrapper(const T &t, const mpl::bool_<false> &) const
+        void m_visit_reference_wrapper(const T &t, const std::false_type &) const
         {
-            m_visit_pointer(t, mpl::bool_<is_pointer<T>::value>());
+            m_visit_pointer(t, std::is_pointer<T>{});
         }
         template<typename T>
-        void m_visit_pointer(const T &t, const mpl::bool_<true> &) const
+        void m_visit_pointer(const T &t, const std::true_type &) const
         {
-            m_visit_not_function_pointer(t, mpl::bool_<!is_function<typename remove_pointer<T>::type>::value>());
+            m_visit_not_function_pointer(t, std::negation<std::is_function<std::remove_pointer_t<T>>>{});
         }
         template<typename T>
-        void m_visit_pointer(const T &t, const mpl::bool_<false> &) const
+        void m_visit_pointer(const T &t, const std::false_type &) const
         {
-            m_visit_pointer(boost::addressof(t), mpl::bool_<true>());
+            m_visit_pointer(std::addressof(t), std::true_type{});
         }
         template<typename T>
-        void m_visit_not_function_pointer(const T *t, const mpl::bool_<true> &) const
+        void m_visit_not_function_pointer(const T *t, const std::true_type &) const
         {
-            m_visit_signal(t, mpl::bool_<is_signal<T>::value>());
+            m_visit_signal(t, is_signal<T>{});
         }
         template<typename T>
-        void m_visit_not_function_pointer(const T &, const mpl::bool_<false> &) const
+        void m_visit_not_function_pointer(const T &, const std::false_type &) const
         {}
         template<typename T>
-        void m_visit_signal(const T *signal, const mpl::bool_<true> &) const
+        void m_visit_signal(const T *signal, const std::true_type &) const
         {
           if(signal)
             slot_->track_signal(*signal);
         }
         template<typename T>
-        void m_visit_signal(const T &t, const mpl::bool_<false> &) const
+        void m_visit_signal(const T &t, const std::false_type &) const
         {
             add_if_trackable(t);
         }

@@ -11,21 +11,22 @@
 #ifndef BOOST_SIGNALS2_SIGNAL_BASE_HPP
 #define BOOST_SIGNALS2_SIGNAL_BASE_HPP
 
-#include <boost/core/noncopyable.hpp>
-#include <boost/shared_ptr.hpp>
 
 namespace boost {
   namespace signals2 {
     class slot_base;
 
-    class signal_base : public noncopyable
+    class signal_base
     {
     public:
       friend class slot_base;
+      signal_base() = default;
+      signal_base(const signal_base &) = delete;
+      signal_base &operator=(const signal_base &) = delete;
 
       virtual ~signal_base() {}
     protected:
-      virtual shared_ptr<void> lock_pimpl() const = 0;
+      virtual std::shared_ptr<void> lock_pimpl() const = 0;
     };
   } // end namespace signals2
 } // end namespace boost

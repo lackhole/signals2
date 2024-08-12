@@ -11,9 +11,7 @@
 #ifndef BOOST_SIGNALS2_OPTIONAL_LAST_VALUE_HPP
 #define BOOST_SIGNALS2_OPTIONAL_LAST_VALUE_HPP
 
-#include <boost/core/no_exceptions_support.hpp>
-#include <boost/move/utility_core.hpp>
-#include <boost/optional.hpp>
+#include <optional>
 #include <boost/signals2/expired_slot.hpp>
 
 namespace boost {
@@ -23,20 +21,22 @@ namespace boost {
       class optional_last_value
     {
     public:
-      typedef optional<T> result_type;
+      typedef std::optional<T> result_type;
 
       template<typename InputIterator>
-        optional<T> operator()(InputIterator first, InputIterator last) const
+      std::optional<T> operator()(InputIterator first, InputIterator last) const
       {
-        optional<T> value;
+        std::optional<T> value;
         while (first != last)
         {
-          BOOST_TRY
+          try
           {
-            value = boost::move_if_not_lvalue_reference<T>(*first);
+            if constexpr (std::is_lvalue_reference_v<T>)
+              value = *first;
+            else
+              value = std::move(*first);
           }
-          BOOST_CATCH(const expired_slot &) {}
-          BOOST_CATCH_END
+          catch (const expired_slot &) {}
           ++first;
         }
         return value;
@@ -53,12 +53,11 @@ namespace boost {
       {
         while (first != last)
         {
-          BOOST_TRY
+          try
           {
             *first;
           }
-          BOOST_CATCH(const expired_slot &) {}
-          BOOST_CATCH_END
+          catch (const expired_slot &) {}
           ++first;
         }
         return;

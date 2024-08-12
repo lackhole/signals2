@@ -11,16 +11,16 @@
 #ifndef BOOST_SIGNALS2_EXPIRED_SLOT_HPP
 #define BOOST_SIGNALS2_EXPIRED_SLOT_HPP
 
-#include <boost/smart_ptr/bad_weak_ptr.hpp>
+#include <exception>
 
 namespace boost
 {
   namespace signals2
   {
-    class expired_slot: public bad_weak_ptr
+   class expired_slot: public std::exception
     {
     public:
-      virtual char const * what() const throw()
+      char const * what() const throw() override
       {
         return "boost::signals2::expired_slot";
       }

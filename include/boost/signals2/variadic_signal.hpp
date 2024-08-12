@@ -16,13 +16,8 @@
 #ifndef BOOST_SIGNALS2_VARIADIC_SIGNAL_HPP
 #define BOOST_SIGNALS2_VARIADIC_SIGNAL_HPP
 
-#include <boost/core/enable_if.hpp>
-#include <boost/preprocessor/control/expr_if.hpp>
 #include <boost/signals2/detail/variadic_arg_type.hpp>
 #include <boost/signals2/detail/variadic_slot_invoker.hpp>
-#include <boost/smart_ptr/make_shared.hpp>
-#include <boost/type_traits/function_traits.hpp>
-#include <boost/type_traits/is_void.hpp> 
 
 namespace boost
 {
@@ -36,7 +31,7 @@ namespace boost
         class variadic_extended_signature<R (Args...)>
       {
       public:
-        typedef boost::function<R (const boost::signals2::connection &, Args...)> function_type;
+        typedef std::function<R (const boost::signals2::connection &, Args...)> function_type;
       };
     } // namespace detail
   } // namespace signals2

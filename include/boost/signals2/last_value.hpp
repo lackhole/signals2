@@ -11,14 +11,34 @@
 #ifndef BOOST_SIGNALS2_LAST_VALUE_HPP
 #define BOOST_SIGNALS2_LAST_VALUE_HPP
 
-#include <boost/core/no_exceptions_support.hpp>
-#include <boost/move/utility_core.hpp>
-#include <boost/optional.hpp>
-#include <boost/signals2/expired_slot.hpp>
-#include <boost/throw_exception.hpp>
+#include <exception>
+#include <optional>
 #include <stdexcept>
+#include <type_traits>
+
+#include <boost/signals2/expired_slot.hpp>
 
 namespace boost {
+
+template<typename T, typename U>
+constexpr auto&& forward_like(U&& x) noexcept {
+  constexpr bool is_adding_const = std::is_const_v<std::remove_reference_t<T>>;
+  if constexpr (std::is_lvalue_reference_v<T&&>)
+  {
+    if constexpr (is_adding_const)
+      return std::as_const(x);
+    else
+      return static_cast<U&>(x);
+  }
+  else
+  {
+    if constexpr (is_adding_const)
+      return std::move(std::as_const(x));
+    else
+      return std::move(x);
+  }
+}
+
   namespace signals2 {
 
     // no_slots_error is thrown when we are unable to generate a return value
@@ -39,21 +59,20 @@ namespace boost {
       {
         if(first == last)
         {
-          boost::throw_exception(no_slots_error());
+          throw(no_slots_error());
         }
-        optional<T> value;
+        std::optional<T> value;
         while (first != last)
         {
-          BOOST_TRY
+          try
           {
-            value = boost::move_if_not_lvalue_reference<T>(*first);
+            value = forward_like<T>(*first);
           }
-          BOOST_CATCH(const expired_slot &) {}
-          BOOST_CATCH_END
+          catch (const expired_slot &) {}
           ++first;
         }
-        if(value) return value.get();
-        boost::throw_exception(no_slots_error());
+        if(value) return *value;
+        throw (no_slots_error());
       }
     };
 
@@ -66,12 +85,12 @@ namespace boost {
       {
         while (first != last)
         {
-          BOOST_TRY
+          try
           {
             *first;
           }
-          BOOST_CATCH(const expired_slot &) {}
-          BOOST_CATCH_END
+          catch (const expired_slot &) {}
+
           ++first;
         }
         return;
