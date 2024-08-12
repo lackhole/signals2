@@ -1,3 +1,9 @@
+## C++17 implementation of standalone Boost.Signals2
+* No dependency on other Boost libraries
+* `boost::signals2::slot::track_foreign` is removed.
+
+----------
+
 Signals2, part of collection of the [Boost C++ Libraries](http://github.com/boostorg), is an implementation of a managed signals and slots system.
 
 ### License
@@ -6,7 +12,7 @@ Distributed under the [Boost Software License, Version 1.0](http://www.boost.org
 
 ### Properties
 
-* C++03
+* C++17
 * Header-Only
 
 ### Build Status
